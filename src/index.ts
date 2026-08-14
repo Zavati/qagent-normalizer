@@ -27,7 +27,7 @@ export default {
     const pathname = normalizePublicPathname(url.pathname);
 
     if (request.method === "GET" && pathname === "/health") {
-      return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", revision: "catalog-contract-v1", role: "processing-plane" });
+      return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", revision: "catalog-contract-v1-fix-1", role: "processing-plane" });
     }
     return json({ status: "not_found", message: "Endpoint inexistente." }, 404);
   },

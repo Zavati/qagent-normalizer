@@ -10,7 +10,8 @@ SERVICE_NAME = "qagent-normalizer"
 [[d1_databases]]
 binding = "NORMALIZER_DB"
 database_name = "qagent-normalizer-dev"
-# Replace after: npx wrangler d1 create qagent-normalizer-dev
+# SNAPSHOT RULE: replace ONLY this database_id with the real qagent-normalizer-dev id.
+# Do not preserve an older wrangler.toml because Queue bindings evolve between snapshots.
 database_id = "10bf6936-a0da-4edc-a97b-279f688a4c75"
 migrations_dir = "migrations"
 
@@ -21,3 +22,7 @@ max_batch_timeout = 5
 max_retries = 5
 max_concurrency = 1
 dead_letter_queue = "qagent-normalization-dlq-dev"
+
+[[queues.producers]]
+binding = "CATALOG_UPDATE_QUEUE"
+queue = "qagent-catalog-updates-dev"

@@ -31,3 +31,7 @@ queue = "qagent-catalog-updates-dev"
 ```
 
 Create and deploy the Catalog consumer first, then deploy this Normalizer snapshot.
+
+## Build fix 1 — configuration preservation rule
+
+When applying this snapshot, preserve **only** the real `NORMALIZER_DB.database_id` from the deployed environment. Do not preserve an older `wrangler.toml`, because this revision requires the `CATALOG_UPDATE_QUEUE` producer binding.

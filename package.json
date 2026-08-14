@@ -1,17 +1,18 @@
 {
   "name": "qagent-normalizer",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "QAgent Processing Plane - asynchronous observation normalization.",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "build": "npm run typecheck",
     "deploy": "npm run check && wrangler deploy",
-    "cf-types": "wrangler types",
+    "cf-types": "npm run verify:bindings && wrangler types",
     "typecheck": "npm run cf-types && tsc --noEmit",
     "test": "npm run cf-types && vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && vitest run"
+    "check": "npm run typecheck && vitest run",
+    "verify:bindings": "node scripts/verify-bindings.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.1",
