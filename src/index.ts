@@ -27,7 +27,7 @@ export default {
     const pathname = normalizePublicPathname(url.pathname);
 
     if (request.method === "GET" && pathname === "/health") {
-      return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", revision: "catalog-contract-v1-fix-1", role: "processing-plane" });
+      return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", revision: "catalog-contract-v1-fix-2", role: "processing-plane" });
     }
     return json({ status: "not_found", message: "Endpoint inexistente." }, 404);
   },
@@ -42,7 +42,9 @@ export default {
           continue;
         }
         await processHandoff(env.NORMALIZER_DB, message.body, {
-          send: async (catalogEvent) => env.CATALOG_UPDATE_QUEUE.send(catalogEvent),
+          send: async (catalogEvent) => {
+            await env.CATALOG_UPDATE_QUEUE.send(catalogEvent);
+          },
         });
         message.ack();
       } catch (error) {
