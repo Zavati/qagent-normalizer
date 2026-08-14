@@ -1,8 +1,6 @@
 # qagent-normalizer
 
 QAgent asynchronous Processing Plane introduced in Foundation 07.4.10.
-teste
-
 
 ## Responsibility
 
@@ -37,5 +35,11 @@ npx wrangler deploy
 Health:
 
 ```text
+# workers.dev / direct Worker URL
 GET /health
+
+# public Cloudflare Route
+GET /v1/normalizer/health
 ```
+
+The Worker normalizes the public `/v1/normalizer` prefix internally, so the same handler works through a Custom Route without requiring Cloudflare to strip the prefix.

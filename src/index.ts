@@ -1,5 +1,6 @@
 import type { NormalizationHandoffMessage } from "./contracts/handoff";
 import { processHandoff } from "./normalization/processor";
+import { normalizePublicPathname } from "./http/publicPath";
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -23,7 +24,9 @@ function isHandoff(value: unknown): value is NormalizationHandoffMessage {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname === "/health") {
+    const pathname = normalizePublicPathname(url.pathname);
+
+    if (request.method === "GET" && pathname === "/health") {
       return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", role: "processing-plane" });
     }
     return json({ status: "not_found", message: "Endpoint inexistente." }, 404);

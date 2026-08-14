@@ -24,3 +24,4 @@ qagent-plugin-v2
 7. Schema inference persists structure/types only, never JSON sample values.
 8. Dynamic path normalization v1 uses strong deterministic patterns only (numeric IDs, UUID, ObjectId, ULID, long hex).
 9. API Catalog remains downstream; `normalized_endpoints` is Processing Plane materialization, not browser authority.
+10. Public HTTP routing accepts the Cloudflare Route prefix `/v1/normalizer/*` while keeping direct `/health` compatibility on workers.dev.
