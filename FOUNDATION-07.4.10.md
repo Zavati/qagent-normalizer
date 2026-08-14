@@ -25,3 +25,11 @@ qagent-plugin-v2
 8. Dynamic path normalization v1 uses strong deterministic patterns only (numeric IDs, UUID, ObjectId, ULID, long hex).
 9. API Catalog remains downstream; `normalized_endpoints` is Processing Plane materialization, not browser authority.
 10. Public HTTP routing accepts the Cloudflare Route prefix `/v1/normalizer/*` while keeping direct `/health` compatibility on workers.dev.
+
+## Production SQL binding fix
+
+- Corrected `normalized_endpoint_events` INSERT to bind 19 values for 19 columns.
+- Corrected `normalized_endpoints` UPSERT to bind 27 values for 27 columns.
+- Added `repositorySql.test.ts` to validate SQL placeholder/bind cardinality without filesystem inspection.
+- Removed the filesystem-only architecture test from the Worker Vitest pool.
+

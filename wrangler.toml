@@ -11,7 +11,7 @@ SERVICE_NAME = "qagent-normalizer"
 binding = "NORMALIZER_DB"
 database_name = "qagent-normalizer-dev"
 # Replace after: npx wrangler d1 create qagent-normalizer-dev
-database_id = "10bf6936-a0da-4edc-a97b-279f688a4c75"
+database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
 [[queues.consumers]]

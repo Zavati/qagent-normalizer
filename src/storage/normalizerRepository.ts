@@ -99,7 +99,7 @@ export async function insertEndpointEvent(db: D1Database, event: NormalizedEvent
       observation_session_id, batch_id, method, scheme, host, normalized_path,
       observed_at, status_code, network_failure, origin_relation, latency_ms,
       request_schema_json, response_schema_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     event.eventId, event.endpointId, event.organizationId, event.projectId, event.environmentId,
     event.observationSessionId, event.batchId, event.method, event.scheme, event.host, event.normalizedPath,
@@ -182,7 +182,7 @@ export async function upsertNormalizedEndpoint(
       same_origin_count, same_site_count, external_count, unknown_origin_count,
       latency_total_ms, latency_min_ms, latency_max_ms,
       request_schema_json, response_schema_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(endpoint_id) DO UPDATE SET
       first_seen_at = excluded.first_seen_at,
       last_seen_at = excluded.last_seen_at,
