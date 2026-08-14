@@ -1,6 +1,8 @@
 # qagent-normalizer
 
 QAgent asynchronous Processing Plane introduced in Foundation 07.4.10.
+teste
+
 
 ## Responsibility
 
