@@ -2,6 +2,7 @@ import type { HandoffObservation, NormalizationHandoffMessage } from "../contrac
 import { normalizeApiUrl } from "./pathNormalizer";
 import { inferJsonSchema, mergeSchemas } from "./schemaInference";
 import { classifyOriginRelation } from "./originRelation";
+import { buildCatalogUpdateMessage, type CatalogUpdateMessageV1 } from "../contracts/catalogUpdate";
 import {
   getEndpointAggregate,
   getExistingEndpointSchemas,
@@ -14,6 +15,12 @@ import {
 } from "../storage/normalizerRepository";
 
 const API_RESOURCE_TYPES = new Set(["fetch", "xhr", "xmlhttprequest", "websocket", "eventsource"]);
+
+function normalizeContentType(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const mediaType = value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  return mediaType ? mediaType.slice(0, 128) : null;
+}
 
 function isApiCandidate(observation: HandoffObservation): boolean {
   const resourceType = observation.resourceType.toLowerCase();
@@ -46,7 +53,7 @@ async function normalizeEvent(message: NormalizationHandoffMessage, observation:
     environmentId: message.context.environmentId,
     observationSessionId: message.context.observationSessionId,
     batchId: message.batch.batchId,
-    method: observation.method,
+    method: observation.method.trim().toUpperCase(),
     scheme: url.scheme,
     host: url.host,
     normalizedPath: url.normalizedPath,
@@ -55,6 +62,9 @@ async function normalizeEvent(message: NormalizationHandoffMessage, observation:
     networkFailure: observation.failureCode !== null,
     originRelation: classifyOriginRelation(observation.pageUrl, observation.safeUrl),
     latencyMs: observation.latencyMs,
+    resourceType: observation.resourceType.trim().toLowerCase() || "unknown",
+    requestContentType: normalizeContentType(observation.requestSample?.contentType),
+    responseContentType: normalizeContentType(observation.responseSample?.contentType),
     requestSchema: inferJsonSchema(observation.requestSample?.contentType ?? null, observation.requestSample?.body ?? null, observation.requestSample?.truncated ?? false),
     responseSchema: inferJsonSchema(observation.responseSample?.contentType ?? null, observation.responseSample?.body ?? null, observation.responseSample?.truncated ?? false),
     createdAt: new Date().toISOString(),
@@ -72,7 +82,15 @@ async function applyEvent(db: D1Database, event: NormalizedEventInput): Promise<
   await upsertNormalizedEndpoint(db, event, aggregate, requestSchema, responseSchema);
 }
 
-export async function processHandoff(db: D1Database, message: NormalizationHandoffMessage): Promise<void> {
+export interface CatalogUpdatePublisher {
+  send(message: CatalogUpdateMessageV1): Promise<void>;
+}
+
+export async function processHandoff(
+  db: D1Database,
+  message: NormalizationHandoffMessage,
+  catalogPublisher: CatalogUpdatePublisher,
+): Promise<void> {
   await recordHandoffReceived(db, {
     handoffId: message.handoffId,
     partIndex: message.partIndex,
@@ -90,7 +108,10 @@ export async function processHandoff(db: D1Database, message: NormalizationHando
     for (const observation of message.observations) {
       if (!isApiCandidate(observation)) continue;
       const event = await normalizeEvent(message, observation);
-      if (event) await applyEvent(db, event);
+      if (event) {
+        await applyEvent(db, event);
+        await catalogPublisher.send(await buildCatalogUpdateMessage(event));
+      }
     }
     await markHandoffProcessed(db, message.handoffId, message.partIndex);
   } catch (error) {

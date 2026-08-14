@@ -43,3 +43,8 @@ GET /v1/normalizer/health
 ```
 
 The Worker normalizes the public `/v1/normalizer` prefix internally, so the same handler works through a Custom Route without requiring Cloudflare to strip the prefix.
+
+
+## Catalog handoff — Foundation 07.5.2
+
+After deterministic normalization, each API candidate publishes a versioned `qagent.catalog-update.v1` derived event through `CATALOG_UPDATE_QUEUE`. No raw request/response payload is included.

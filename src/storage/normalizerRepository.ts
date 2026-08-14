@@ -18,6 +18,9 @@ export interface NormalizedEventInput {
   networkFailure: boolean;
   originRelation: OriginRelation;
   latencyMs: number;
+  resourceType: string;
+  requestContentType: string | null;
+  responseContentType: string | null;
   requestSchema: InferredSchema | null;
   responseSchema: InferredSchema | null;
   createdAt: string;
