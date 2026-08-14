@@ -1,0 +1,23 @@
+name = "qagent-normalizer"
+main = "src/index.ts"
+compatibility_date = "2026-08-13"
+workers_dev = true
+
+[vars]
+ENVIRONMENT = "development"
+SERVICE_NAME = "qagent-normalizer"
+
+[[d1_databases]]
+binding = "NORMALIZER_DB"
+database_name = "qagent-normalizer-dev"
+# Replace after: npx wrangler d1 create qagent-normalizer-dev
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[queues.consumers]]
+queue = "qagent-normalization-dev"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+max_concurrency = 1
+dead_letter_queue = "qagent-normalization-dlq-dev"
