@@ -38,7 +38,7 @@ export interface CatalogUpdateMessageV1 {
     latencyMs: number;
     resourceType: string;
     authObserved?: boolean;
-    authScheme?: "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN" | null;
+    authScheme?: "BEARER" | "BASIC" | "API_KEY" | "COOKIE" | "UNKNOWN" | null;
     requestContentType: string | null;
     responseContentType: string | null;
   };

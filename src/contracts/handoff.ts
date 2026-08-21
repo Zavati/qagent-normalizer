@@ -14,7 +14,7 @@ export interface HandoffObservation {
   resourceType: string;
   failureCode: string | null;
   authObserved?: boolean;
-  authScheme?: "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN" | null;
+  authScheme?: "BEARER" | "BASIC" | "API_KEY" | "COOKIE" | "UNKNOWN" | null;
   navigationId: string | null;
   pageUrl: string | null;
   requestSample: HandoffSample | null;

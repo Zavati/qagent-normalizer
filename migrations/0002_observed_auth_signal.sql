@@ -6,7 +6,7 @@ ALTER TABLE normalized_endpoint_events
   ADD COLUMN auth_scheme TEXT
     CHECK (
       auth_scheme IS NULL
-      OR auth_scheme IN ('BEARER', 'BASIC', 'API_KEY', 'UNKNOWN')
+      OR auth_scheme IN ('BEARER', 'BASIC', 'API_KEY', 'COOKIE', 'UNKNOWN')
     );
 
 CREATE INDEX IF NOT EXISTS idx_normalized_endpoint_events_auth_signal

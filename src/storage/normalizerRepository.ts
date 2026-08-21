@@ -1,7 +1,7 @@
 import type { InferredSchema } from "../normalization/schemaInference";
 import type { OriginRelation } from "../normalization/originRelation";
 
-export type ObservedAuthScheme = "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN";
+export type ObservedAuthScheme = "BEARER" | "BASIC" | "API_KEY" | "COOKIE" | "UNKNOWN";
 
 export interface NormalizedEventInput {
   eventId: string;

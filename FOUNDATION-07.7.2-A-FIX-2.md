@@ -5,7 +5,7 @@ Extends the existing additive contracts with optional, derived auth metadata:
 
 ```text
 authObserved?: boolean
-authScheme?: BEARER | BASIC | API_KEY | UNKNOWN | null
+authScheme?: BEARER | BASIC | API_KEY | COOKIE | UNKNOWN | null
 ```
 
 The Normalizer:

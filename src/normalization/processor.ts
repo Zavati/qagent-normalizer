@@ -33,7 +33,7 @@ function isApiCandidate(observation: HandoffObservation): boolean {
 
 function normalizeObservedAuthSignal(observation: HandoffObservation): {
   authObserved: boolean | null;
-  authScheme: "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN" | null;
+  authScheme: "BEARER" | "BASIC" | "API_KEY" | "COOKIE" | "UNKNOWN" | null;
 } {
   if (observation.authObserved === undefined && observation.authScheme === undefined) {
     return { authObserved: null, authScheme: null };
@@ -50,7 +50,7 @@ function normalizeObservedAuthSignal(observation: HandoffObservation): {
   }
 
   const scheme = observation.authScheme;
-  if (scheme === "BEARER" || scheme === "BASIC" || scheme === "API_KEY" || scheme === "UNKNOWN") {
+  if (scheme === "BEARER" || scheme === "BASIC" || scheme === "API_KEY" || scheme === "COOKIE" || scheme === "UNKNOWN") {
     return { authObserved: true, authScheme: scheme };
   }
 
