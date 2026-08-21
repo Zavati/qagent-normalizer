@@ -22,6 +22,8 @@ function event(): NormalizedEventInput {
     originRelation: "SAME_ORIGIN",
     latencyMs: 111,
     resourceType: "fetch",
+    authObserved: true,
+    authScheme: "BEARER",
     requestContentType: "application/json",
     responseContentType: "application/json",
     requestSchema: inferJsonSchema("application/json", JSON.stringify({ password: "super-secret", id: 42 }), false),
@@ -57,4 +59,15 @@ describe("Foundation 07.5.2 Normalizer -> Catalog contract", () => {
     const [ma, mb] = await Promise.all([buildCatalogUpdateMessage(a), buildCatalogUpdateMessage(b)]);
     expect(ma.schemas.request?.hash).toBe(mb.schemas.request?.hash);
   });
+
+  it("propagates only derived auth presence/scheme metadata to Catalog", async () => {
+    const message = await buildCatalogUpdateMessage(event(), "2026-08-14T21:01:00.000Z");
+    expect(message.observation.authObserved).toBe(true);
+    expect(message.observation.authScheme).toBe("BEARER");
+    const serialized = JSON.stringify(message);
+    expect(serialized.toLowerCase()).not.toContain('"authorization"');
+    expect(serialized).not.toContain("Bearer ey");
+    expect(serialized).not.toContain("raw-token");
+  });
+
 });

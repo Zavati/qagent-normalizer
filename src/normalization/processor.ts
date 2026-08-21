@@ -30,6 +30,33 @@ function isApiCandidate(observation: HandoffObservation): boolean {
   return requestType.includes("json") || responseType.includes("json");
 }
 
+
+function normalizeObservedAuthSignal(observation: HandoffObservation): {
+  authObserved: boolean | null;
+  authScheme: "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN" | null;
+} {
+  if (observation.authObserved === undefined && observation.authScheme === undefined) {
+    return { authObserved: null, authScheme: null };
+  }
+
+  if (typeof observation.authObserved !== "boolean") {
+    return { authObserved: null, authScheme: null };
+  }
+
+  if (!observation.authObserved) {
+    return observation.authScheme === undefined || observation.authScheme === null
+      ? { authObserved: false, authScheme: null }
+      : { authObserved: null, authScheme: null };
+  }
+
+  const scheme = observation.authScheme;
+  if (scheme === "BEARER" || scheme === "BASIC" || scheme === "API_KEY" || scheme === "UNKNOWN") {
+    return { authObserved: true, authScheme: scheme };
+  }
+
+  return { authObserved: null, authScheme: null };
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
@@ -45,6 +72,7 @@ async function normalizeEvent(message: NormalizationHandoffMessage, observation:
   const url = normalizeApiUrl(observation.safeUrl);
   if (!url) return null;
   const endpointId = await endpointIdFor(message, observation, url.scheme, url.host, url.normalizedPath);
+  const authSignal = normalizeObservedAuthSignal(observation);
   return {
     eventId: observation.eventId,
     endpointId,
@@ -63,6 +91,8 @@ async function normalizeEvent(message: NormalizationHandoffMessage, observation:
     originRelation: classifyOriginRelation(observation.pageUrl, observation.safeUrl),
     latencyMs: observation.latencyMs,
     resourceType: observation.resourceType.trim().toLowerCase() || "unknown",
+    authObserved: authSignal.authObserved,
+    authScheme: authSignal.authScheme,
     requestContentType: normalizeContentType(observation.requestSample?.contentType),
     responseContentType: normalizeContentType(observation.responseSample?.contentType),
     requestSchema: inferJsonSchema(observation.requestSample?.contentType ?? null, observation.requestSample?.body ?? null, observation.requestSample?.truncated ?? false),

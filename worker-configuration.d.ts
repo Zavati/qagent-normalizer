@@ -3,6 +3,7 @@
 // Runtime types generated with workerd@1.20260811.1 2026-08-12 
 interface __BaseEnv_Env {
 	NORMALIZER_DB: D1Database;
+	CATALOG_UPDATE_QUEUE: Queue;
 	ENVIRONMENT: "development";
 	SERVICE_NAME: "qagent-normalizer";
 }

@@ -37,6 +37,8 @@ export interface CatalogUpdateMessageV1 {
     originRelation: OriginRelation;
     latencyMs: number;
     resourceType: string;
+    authObserved?: boolean;
+    authScheme?: "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN" | null;
     requestContentType: string | null;
     responseContentType: string | null;
   };
@@ -112,6 +114,10 @@ export async function buildCatalogUpdateMessage(
       originRelation: event.originRelation,
       latencyMs: event.latencyMs,
       resourceType: event.resourceType,
+      ...(event.authObserved === null ? {} : {
+        authObserved: event.authObserved,
+        authScheme: event.authScheme,
+      }),
       requestContentType: event.requestContentType,
       responseContentType: event.responseContentType,
     },

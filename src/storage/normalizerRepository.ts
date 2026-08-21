@@ -1,6 +1,8 @@
 import type { InferredSchema } from "../normalization/schemaInference";
 import type { OriginRelation } from "../normalization/originRelation";
 
+export type ObservedAuthScheme = "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN";
+
 export interface NormalizedEventInput {
   eventId: string;
   endpointId: string;
@@ -19,6 +21,8 @@ export interface NormalizedEventInput {
   originRelation: OriginRelation;
   latencyMs: number;
   resourceType: string;
+  authObserved: boolean | null;
+  authScheme: ObservedAuthScheme | null;
   requestContentType: string | null;
   responseContentType: string | null;
   requestSchema: InferredSchema | null;
@@ -101,12 +105,14 @@ export async function insertEndpointEvent(db: D1Database, event: NormalizedEvent
       event_id, endpoint_id, organization_id, project_id, environment_id,
       observation_session_id, batch_id, method, scheme, host, normalized_path,
       observed_at, status_code, network_failure, origin_relation, latency_ms,
+      auth_observed, auth_scheme,
       request_schema_json, response_schema_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     event.eventId, event.endpointId, event.organizationId, event.projectId, event.environmentId,
     event.observationSessionId, event.batchId, event.method, event.scheme, event.host, event.normalizedPath,
     event.observedAt, event.statusCode, event.networkFailure ? 1 : 0, event.originRelation, event.latencyMs,
+    event.authObserved === null ? null : (event.authObserved ? 1 : 0), event.authScheme,
     event.requestSchema ? JSON.stringify(event.requestSchema) : null,
     event.responseSchema ? JSON.stringify(event.responseSchema) : null,
     event.createdAt,

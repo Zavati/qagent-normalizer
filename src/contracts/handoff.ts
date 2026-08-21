@@ -13,6 +13,8 @@ export interface HandoffObservation {
   latencyMs: number;
   resourceType: string;
   failureCode: string | null;
+  authObserved?: boolean;
+  authScheme?: "BEARER" | "BASIC" | "API_KEY" | "UNKNOWN" | null;
   navigationId: string | null;
   pageUrl: string | null;
   requestSample: HandoffSample | null;

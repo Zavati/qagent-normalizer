@@ -22,4 +22,15 @@ describe("Foundation 07.4.10 Processing Plane architecture", () => {
     expect(contract).not.toContain("qog_");
     expect(contract).not.toContain("qos_");
   });
+
+  it("allows only coarse derived authentication metadata, never credential values", () => {
+    const handoff = read("src/contracts/handoff.ts");
+    const catalogUpdate = read("src/contracts/catalogUpdate.ts");
+    expect(handoff).toContain("authObserved?: boolean");
+    expect(catalogUpdate).toContain("authObserved?: boolean");
+    expect(handoff.toLowerCase()).not.toContain("authorization:");
+    expect(catalogUpdate.toLowerCase()).not.toContain("authorization:");
+    expect(catalogUpdate).not.toContain("accessToken");
+  });
+
 });
