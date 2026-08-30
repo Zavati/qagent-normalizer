@@ -27,13 +27,13 @@ export default {
     const pathname = normalizePublicPathname(url.pathname);
 
     if (request.method === "GET" && pathname === "/health") {
-      return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", revision: "catalog-contract-v1-fix-2", role: "processing-plane" });
+      return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", revision: "sql-fix-3-insert-diagnostics", role: "processing-plane" });
     }
     return json({ status: "not_found", message: "Endpoint inexistente." }, 404);
   },
 
   async queue(batch, env): Promise<void> {
-    console.log("[QAgent Normalizer] revision=sql-fix-2 messages=" + batch.messages.length);
+    console.log("[QAgent Normalizer] revision=sql-fix-3-insert-diagnostics messages=" + batch.messages.length);
     for (const message of batch.messages) {
       try {
         if (!isHandoff(message.body)) {
@@ -48,7 +48,10 @@ export default {
         });
         message.ack();
       } catch (error) {
-        console.error("[QAgent Normalizer] handoff processing failed", message.id, error);
+        const code = typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code?: unknown }).code ?? "NORMALIZER_UNKNOWN_ERROR")
+          : "NORMALIZER_UNKNOWN_ERROR";
+        console.error("[QAgent Normalizer] handoff processing failed", message.id, code, error);
         message.retry({ delaySeconds: 5 });
       }
     }

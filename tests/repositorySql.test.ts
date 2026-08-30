@@ -8,7 +8,7 @@ import {
 } from "../src/storage/normalizerRepository";
 
 class StatementProbe {
-  constructor(private readonly sql: string) {}
+  constructor(readonly sql: string) {}
 
   bind(...values: unknown[]) {
     const placeholders = (this.sql.match(/\?/g) ?? []).length;
@@ -19,7 +19,11 @@ class StatementProbe {
   }
 
   async run() {
-    return {};
+    return { meta: { changes: 1 } };
+  }
+
+  async first<T>() {
+    return null as T | null;
   }
 }
 
@@ -48,6 +52,10 @@ const event: NormalizedEventInput = {
   networkFailure: false,
   originRelation: "SAME_ORIGIN",
   latencyMs: 42,
+  authObserved: null,
+  authScheme: null,
+  requestContentType: null,
+  responseContentType: "application/json",
   requestSchema: null,
   responseSchema: { type: "object", properties: { id: { type: "integer" } } },
   createdAt: "2026-08-14T18:00:00.000Z",
@@ -89,6 +97,11 @@ describe("Foundation 07.4.10 repository SQL bindings", () => {
 
   it("matches normalized event INSERT placeholders to bound values", async () => {
     await expect(insertEndpointEvent(dbProbe(), event)).resolves.toBeUndefined();
+  });
+
+  it("rejects invalid negative latency before D1 can silently ignore the row", async () => {
+    await expect(insertEndpointEvent(dbProbe(), { ...event, latencyMs: -1 }))
+      .rejects.toMatchObject({ name: "NormalizerInvariantError", code: "NORMALIZER_EVENT_LATENCY_INVALID" });
   });
 
   it("matches normalized endpoint UPSERT placeholders to bound values", async () => {

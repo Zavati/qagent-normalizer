@@ -99,15 +99,34 @@ export async function markHandoffFailed(db: D1Database, handoffId: string, partI
   `).bind(message, now, handoffId, partIndex).run();
 }
 
+
+function normalizerInvariant(code: string): Error & { code: string } {
+  const error = new Error(code) as Error & { code: string };
+  error.name = "NormalizerInvariantError";
+  error.code = code;
+  return error;
+}
+
+function assertStorageSafeEvent(event: NormalizedEventInput): void {
+  if (!event.eventId?.trim()) throw normalizerInvariant("NORMALIZER_EVENT_ID_INVALID");
+  if (!event.endpointId?.trim()) throw normalizerInvariant("NORMALIZER_ENDPOINT_ID_INVALID");
+  if (!event.observedAt?.trim()) throw normalizerInvariant("NORMALIZER_EVENT_OBSERVED_AT_INVALID");
+  if (!Number.isFinite(event.latencyMs) || event.latencyMs < 0) {
+    throw normalizerInvariant("NORMALIZER_EVENT_LATENCY_INVALID");
+  }
+}
+
 export async function insertEndpointEvent(db: D1Database, event: NormalizedEventInput): Promise<void> {
-  await db.prepare(`
-    INSERT OR IGNORE INTO normalized_endpoint_events (
+  assertStorageSafeEvent(event);
+  const result = await db.prepare(`
+    INSERT INTO normalized_endpoint_events (
       event_id, endpoint_id, organization_id, project_id, environment_id,
       observation_session_id, batch_id, method, scheme, host, normalized_path,
       observed_at, status_code, network_failure, origin_relation, latency_ms,
       auth_observed, auth_scheme,
       request_schema_json, response_schema_json, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(event_id) DO NOTHING
   `).bind(
     event.eventId, event.endpointId, event.organizationId, event.projectId, event.environmentId,
     event.observationSessionId, event.batchId, event.method, event.scheme, event.host, event.normalizedPath,
@@ -117,6 +136,22 @@ export async function insertEndpointEvent(db: D1Database, event: NormalizedEvent
     event.responseSchema ? JSON.stringify(event.responseSchema) : null,
     event.createdAt,
   ).run();
+
+  // At-least-once Queue delivery legitimately reaches this branch. Only event_id
+  // duplication is ignored. If the same event ID is already attached to another
+  // normalized endpoint, fail closed instead of producing a misleading aggregate error.
+  if (result.meta.changes === 0) {
+    const existing = await db.prepare(`
+      SELECT endpoint_id
+      FROM normalized_endpoint_events
+      WHERE event_id = ?
+      LIMIT 1
+    `).bind(event.eventId).first<{ endpoint_id: string }>();
+    if (!existing) throw normalizerInvariant("NORMALIZER_EVENT_IDEMPOTENCY_STATE_INVALID");
+    if (existing.endpoint_id !== event.endpointId) {
+      throw normalizerInvariant("NORMALIZER_EVENT_ID_COLLISION");
+    }
+  }
 }
 
 export async function getEndpointAggregate(db: D1Database, endpointId: string): Promise<EndpointAggregate> {
