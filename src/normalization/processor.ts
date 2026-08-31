@@ -2,6 +2,7 @@ import type { HandoffObservation, NormalizationHandoffMessage } from "../contrac
 import { normalizeApiUrl } from "./pathNormalizer";
 import { inferJsonSchema, mergeSchemas } from "./schemaInference";
 import { classifyOriginRelation } from "./originRelation";
+import { extractObservedTestData } from "./observedTestData";
 import { buildCatalogUpdateMessage, type CatalogUpdateMessageV1 } from "../contracts/catalogUpdate";
 import {
   getEndpointAggregate,
@@ -97,6 +98,11 @@ async function normalizeEvent(message: NormalizationHandoffMessage, observation:
     responseContentType: normalizeContentType(observation.responseSample?.contentType),
     requestSchema: inferJsonSchema(observation.requestSample?.contentType ?? null, observation.requestSample?.body ?? null, observation.requestSample?.truncated ?? false),
     responseSchema: inferJsonSchema(observation.responseSample?.contentType ?? null, observation.responseSample?.body ?? null, observation.responseSample?.truncated ?? false),
+    observedTestData: await extractObservedTestData(
+      observation.requestSample?.contentType ?? null,
+      observation.requestSample?.body ?? null,
+      observation.requestSample?.truncated ?? false,
+    ),
     createdAt: new Date().toISOString(),
   };
 }

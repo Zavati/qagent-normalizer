@@ -28,6 +28,7 @@ function event(): NormalizedEventInput {
     responseContentType: "application/json",
     requestSchema: inferJsonSchema("application/json", JSON.stringify({ password: "super-secret", id: 42 }), false),
     responseSchema: inferJsonSchema("application/json", JSON.stringify({ token: "raw-token", name: "Igor" }), false),
+    observedTestData: null,
     createdAt: "2026-08-14T21:00:01.000Z",
   };
 }
@@ -40,7 +41,7 @@ describe("Foundation 07.5.2 Normalizer -> Catalog contract", () => {
     expect(first.schemaVersion).toBe("qagent.catalog-update.v1");
   });
 
-  it("contains only derived schemas, never sample values or raw URLs", async () => {
+  it("never emits raw bodies/secrets/URLs; observed values are explicit bounded derived signals", async () => {
     const message = await buildCatalogUpdateMessage(event(), "2026-08-14T21:01:00.000Z");
     const serialized = JSON.stringify(message);
     expect(serialized).not.toContain("super-secret");
@@ -68,6 +69,20 @@ describe("Foundation 07.5.2 Normalizer -> Catalog contract", () => {
     expect(serialized.toLowerCase()).not.toContain('"authorization"');
     expect(serialized).not.toContain("Bearer ey");
     expect(serialized).not.toContain("raw-token");
+  });
+
+
+  it("propagates safe observed test-data candidates without raw request bodies", async () => {
+    const input = event();
+    input.observedTestData = {
+      contractVersion: "qagent.observed-test-data.v1",
+      encoding: "JSON",
+      sampleFingerprint: "otds_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      values: [{ target: "BODY", selector: "$.leaveTypeId", valueType: "INTEGER", value: 3 }],
+    };
+    const message = await buildCatalogUpdateMessage(input, "2026-08-14T21:01:00.000Z");
+    expect(message.observedTestData?.values[0]?.selector).toBe("$.leaveTypeId");
+    expect(JSON.stringify(message)).not.toContain("requestSample");
   });
 
 });

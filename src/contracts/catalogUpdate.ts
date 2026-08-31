@@ -1,6 +1,7 @@
 import type { InferredSchema } from "../normalization/schemaInference";
 import type { OriginRelation } from "../normalization/originRelation";
 import type { NormalizedEventInput } from "../storage/normalizerRepository";
+import type { ObservedTestDataSignal } from "../normalization/observedTestData";
 
 export const CATALOG_UPDATE_SCHEMA_VERSION = "qagent.catalog-update.v1" as const;
 
@@ -46,6 +47,7 @@ export interface CatalogUpdateMessageV1 {
     request: CatalogSchemaSignal | null;
     response: CatalogSchemaSignal | null;
   };
+  observedTestData?: ObservedTestDataSignal;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -122,5 +124,6 @@ export async function buildCatalogUpdateMessage(
       responseContentType: event.responseContentType,
     },
     schemas: { request, response },
+    ...(event.observedTestData ? { observedTestData: event.observedTestData } : {}),
   };
 }

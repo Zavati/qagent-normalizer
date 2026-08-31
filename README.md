@@ -9,7 +9,8 @@ Consumes sanitized Observation handoffs from Cloudflare Queues and derives bound
 - URL/path normalization
 - strong dynamic identifier detection
 - endpoint clustering
-- JSON request/response schema inference (structure only; no values)
+- JSON request/response schema inference (structure only)
+- C2-A safe observed request-value extraction for the Catalog reservoir
 - endpoint occurrence/status/latency aggregation
 - at-least-once-safe processing by `event_id`
 
@@ -47,4 +48,4 @@ The Worker normalizes the public `/v1/normalizer` prefix internally, so the same
 
 ## Catalog handoff — Foundation 07.5.2
 
-After deterministic normalization, each API candidate publishes a versioned `qagent.catalog-update.v1` derived event through `CATALOG_UPDATE_QUEUE`. No raw request/response payload is included.
+After deterministic normalization, each API candidate publishes a versioned `qagent.catalog-update.v1` derived event through `CATALOG_UPDATE_QUEUE`. No raw request/response payload is included. Foundation 07.7.8-C2-A can additionally publish bounded sanitized `observedTestData` candidates derived from the already-redacted request sample.

@@ -27,6 +27,7 @@ function baseEvent(): NormalizedEventInput {
     responseContentType: "application/json",
     requestSchema: null,
     responseSchema: { type: "object", properties: { receive_email: { type: "boolean" } } },
+    observedTestData: null,
     createdAt: "2026-08-21T14:00:00.100Z",
   };
 }

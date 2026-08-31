@@ -1,5 +1,6 @@
 import type { InferredSchema } from "../normalization/schemaInference";
 import type { OriginRelation } from "../normalization/originRelation";
+import type { ObservedTestDataSignal } from "../normalization/observedTestData";
 
 export type ObservedAuthScheme = "BEARER" | "BASIC" | "API_KEY" | "COOKIE" | "UNKNOWN";
 
@@ -27,6 +28,7 @@ export interface NormalizedEventInput {
   responseContentType: string | null;
   requestSchema: InferredSchema | null;
   responseSchema: InferredSchema | null;
+  observedTestData: ObservedTestDataSignal | null;
   createdAt: string;
 }
 

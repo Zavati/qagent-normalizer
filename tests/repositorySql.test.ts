@@ -52,12 +52,14 @@ const event: NormalizedEventInput = {
   networkFailure: false,
   originRelation: "SAME_ORIGIN",
   latencyMs: 42,
+  resourceType: "fetch",
   authObserved: null,
   authScheme: null,
   requestContentType: null,
   responseContentType: "application/json",
   requestSchema: null,
   responseSchema: { type: "object", properties: { id: { type: "integer" } } },
+  observedTestData: null,
   createdAt: "2026-08-14T18:00:00.000Z",
 };
 
