@@ -24,15 +24,33 @@ export interface ObservedTestDataCandidate {
   value: string | number | boolean | null;
 }
 
+/*
+ * 07.7.8-C2-E FIX-1
+ *
+ * Request shape e observed value são conhecimentos diferentes.
+ *
+ * `selectors` registra apenas a existência segura de um selector QUERY.
+ * Não carrega valor, placeholder ou material redigido.
+ *
+ * O campo é opcional para manter compatibilidade estrutural com sinais
+ * BODY antigos de qagent.observed-test-data.v1.
+ */
+export interface ObservedTestDataSelector {
+  target: "QUERY";
+  selector: string;
+}
+
 export interface ObservedTestDataSignal {
   contractVersion: typeof OBSERVED_TEST_DATA_CONTRACT_VERSION;
   encoding: ObservedTestDataEncoding;
   sampleFingerprint: string;
+  selectors?: ObservedTestDataSelector[];
   values: ObservedTestDataCandidate[];
 }
 
 const MAX_DEPTH = 6;
 const MAX_VALUES = 48;
+const MAX_SELECTORS = 48;
 const MAX_STRING_BYTES = 256;
 const MAX_SELECTOR_BYTES = 256;
 
@@ -376,6 +394,85 @@ function extractFormValues(
 }
 
 /*
+ * 07.7.8-C2-E FIX-1 — Observed Query Shape
+ *
+ * A existência de uma query key segura não depende
+ * de o seu valor ser reutilizável.
+ *
+ * Exemplo:
+ *
+ * ?fromDate=[REDACTED]&toDate=[REDACTED]
+ *
+ * selectors:
+ *   QUERY/fromDate
+ *   QUERY/toDate
+ *
+ * values:
+ *   nenhum
+ *
+ * Importante:
+ * - não lemos nem persistimos o literal aqui;
+ * - nomes proibidos continuam excluídos;
+ * - repeated query keys continuam válidas como shape.
+ */
+function extractQuerySelectors(
+  safeUrl: string | null | undefined,
+): ObservedTestDataSelector[] {
+  if (!safeUrl) {
+    return [];
+  }
+
+  let url: URL;
+
+  try {
+    url =
+      new URL(safeUrl);
+  } catch {
+    return [];
+  }
+
+  const selectors:
+    ObservedTestDataSelector[] = [];
+
+  const seen =
+    new Set<string>();
+
+  for (
+    const key
+    of url.searchParams.keys()
+  ) {
+    if (
+      selectors.length >= MAX_SELECTORS
+    ) {
+      break;
+    }
+
+    if (
+      seen.has(key)
+    ) {
+      continue;
+    }
+
+    seen.add(key);
+
+    if (
+      !SAFE_QUERY_PROPERTY.test(key)
+      || isDeniedKey(key)
+      || utf8Bytes(key) > MAX_SELECTOR_BYTES
+    ) {
+      continue;
+    }
+
+    selectors.push({
+      target: "QUERY",
+      selector: key,
+    });
+  }
+
+  return selectors;
+}
+
+/*
  * 07.7.8-C2-E — Observed Query Values
  *
  * A fonte é a safeUrl já entregue pelo Handoff.
@@ -390,6 +487,11 @@ function extractFormValues(
  * QUERY/toDate   = "2026-08-31"
  *
  * Valores redigidos ou secretos são descartados.
+ *
+ * FIX-1:
+ * o descarte do value NÃO remove mais o Query Shape,
+ * que é extraído independentemente por
+ * extractQuerySelectors().
  */
 function extractQueryValues(
   safeUrl: string | null | undefined,
@@ -450,6 +552,9 @@ function extractQueryValues(
      * ?tag=a&tag=b
      *
      * como um selector escalar.
+     *
+     * O shape QUERY:tag, porém, é preservado
+     * por extractQuerySelectors().
      */
     if (
       all.length !== 1
@@ -505,6 +610,18 @@ function canonicalizeCandidates(
     });
 }
 
+function canonicalizeSelectors(
+  selectors: ObservedTestDataSelector[],
+): ObservedTestDataSelector[] {
+  return [...selectors]
+    .sort(
+      (a, b) =>
+        a.selector.localeCompare(
+          b.selector,
+        ),
+    );
+}
+
 async function sha256Hex(
   value: string,
 ): Promise<string> {
@@ -538,9 +655,10 @@ async function sha256Hex(
  * chamadas antigas com os três argumentos BODY
  * continuam válidas.
  *
- * O processor será atualizado para passar:
+ * FIX-1 adiciona Query Shape no mesmo contrato v1
+ * através do campo opcional `selectors`.
  *
- * observation.safeUrl
+ * BODY/value behavior permanece inalterado.
  */
 export async function extractObservedTestData(
   contentType: string | null | undefined,
@@ -598,23 +716,35 @@ export async function extractObservedTestData(
     }
   }
 
+  const querySelectors =
+    extractQuerySelectors(
+      safeUrl,
+    );
+
   const queryValues =
     extractQueryValues(
       safeUrl,
     );
 
+  /*
+   * FIX-1:
+   * Query Shape por si só já é conhecimento válido.
+   * Não exigimos mais um literal reutilizável para
+   * preservar a existência do selector.
+   */
   if (
     bodyValues.length === 0
     && queryValues.length === 0
+    && querySelectors.length === 0
   ) {
     return null;
   }
 
   /*
-   * Mantemos o limite do contrato v1.
+   * Mantemos o limite do contrato de values.
    *
-   * O sample continua sendo uma única observação
-   * correlacionada da request.
+   * O sample de values continua sendo uma única
+   * observação correlacionada da request.
    */
   const canonical =
     canonicalizeCandidates([
@@ -623,8 +753,15 @@ export async function extractObservedTestData(
     ])
       .slice(0, MAX_VALUES);
 
+  const canonicalSelectors =
+    canonicalizeSelectors(
+      querySelectors,
+    )
+      .slice(0, MAX_SELECTORS);
+
   if (
     canonical.length === 0
+    && canonicalSelectors.length === 0
   ) {
     return null;
   }
@@ -648,11 +785,28 @@ export async function extractObservedTestData(
         ? bodyEncoding
         : "QUERY";
 
+  /*
+   * Compatibilidade de fingerprint:
+   *
+   * Quando existem values, mantemos EXATAMENTE
+   * o payload histórico { encoding, values }.
+   *
+   * Isso evita mudar fingerprints/IDs já usados
+   * por BODY ou por QUERY values seguros.
+   *
+   * Somente sinais shape-only usam selectors
+   * para gerar um fingerprint determinístico.
+   */
   const fingerprintPayload =
-    JSON.stringify({
-      encoding,
-      values: canonical,
-    });
+    canonical.length > 0
+      ? JSON.stringify({
+        encoding,
+        values: canonical,
+      })
+      : JSON.stringify({
+        encoding,
+        selectors: canonicalSelectors,
+      });
 
   return {
     contractVersion:
@@ -666,6 +820,13 @@ export async function extractObservedTestData(
           fingerprintPayload,
         )
       ).slice(0, 40)}`,
+
+    ...(canonicalSelectors.length > 0
+      ? {
+        selectors:
+          canonicalSelectors,
+      }
+      : {}),
 
     values:
       canonical,

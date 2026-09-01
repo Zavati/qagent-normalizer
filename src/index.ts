@@ -2,6 +2,9 @@ import type { NormalizationHandoffMessage } from "./contracts/handoff";
 import { processHandoff } from "./normalization/processor";
 import { normalizePublicPathname } from "./http/publicPath";
 
+const NORMALIZER_REVISION =
+  "foundation-07.7.8-C2-E-FIX-1";
+
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
@@ -27,13 +30,21 @@ export default {
     const pathname = normalizePublicPathname(url.pathname);
 
     if (request.method === "GET" && pathname === "/health") {
-      return json({ status: "ok", service: env.SERVICE_NAME, foundation: "07.4.10", revision: "foundation-07.7.8-C2-A", role: "processing-plane" });
+      return json({
+        status: "ok",
+        service: env.SERVICE_NAME,
+        foundation: "07.4.10",
+        revision: NORMALIZER_REVISION,
+        role: "processing-plane",
+      });
     }
     return json({ status: "not_found", message: "Endpoint inexistente." }, 404);
   },
 
   async queue(batch, env): Promise<void> {
-    console.log("[QAgent Normalizer] revision=foundation-07.7.8-C2-A messages=" + batch.messages.length);
+    console.log(
+      `[QAgent Normalizer] revision=${NORMALIZER_REVISION} messages=${batch.messages.length}`,
+    );
     for (const message of batch.messages) {
       try {
         if (!isHandoff(message.body)) {
