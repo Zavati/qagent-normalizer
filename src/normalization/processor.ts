@@ -102,6 +102,7 @@ async function normalizeEvent(message: NormalizationHandoffMessage, observation:
       observation.requestSample?.contentType ?? null,
       observation.requestSample?.body ?? null,
       observation.requestSample?.truncated ?? false,
+      observation.safeUrl,
     ),
     createdAt: new Date().toISOString(),
   };
