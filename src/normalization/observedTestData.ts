@@ -1,14 +1,21 @@
+import {
+  classifyPathSegment,
+  type PathParameterKind,
+} from "./pathNormalizer";
+
 export const OBSERVED_TEST_DATA_CONTRACT_VERSION =
   "qagent.observed-test-data.v1" as const;
 
 export type ObservedTestDataEncoding =
   | "JSON"
   | "FORM_URLENCODED"
-  | "QUERY";
+  | "QUERY"
+  | "PATH";
 
 export type ObservedTestDataTarget =
   | "BODY"
-  | "QUERY";
+  | "QUERY"
+  | "PATH_PARAM";
 
 export type ObservedTestDataValueType =
   | "STRING"
@@ -22,19 +29,16 @@ export interface ObservedTestDataCandidate {
   selector: string;
   valueType: ObservedTestDataValueType;
   value: string | number | boolean | null;
+
+  /*
+   * C2-F: somente PATH_PARAM.
+   * segmentIndex = posição zero-based no pathname.
+   * occurrence = ocorrência zero-based do mesmo placeholder.
+   */
+  segmentIndex?: number;
+  occurrence?: number;
 }
 
-/*
- * 07.7.8-C2-E FIX-1
- *
- * Request shape e observed value são conhecimentos diferentes.
- *
- * `selectors` registra apenas a existência segura de um selector QUERY.
- * Não carrega valor, placeholder ou material redigido.
- *
- * O campo é opcional para manter compatibilidade estrutural com sinais
- * BODY antigos de qagent.observed-test-data.v1.
- */
 export interface ObservedTestDataSelector {
   target: "QUERY";
   selector: string;
@@ -57,20 +61,19 @@ const MAX_SELECTOR_BYTES = 256;
 const SAFE_BODY_PROPERTY =
   /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
 
-/*
- * QUERY utiliza o mesmo selector contract adotado
- * no Gateway para C2-E.
- *
- * Exemplos:
- *
- * fromDate
- * toDate
- * page
- * filter.status
- * sort-order
- */
 const SAFE_QUERY_PROPERTY =
   /^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/;
+
+const SAFE_PATH_SELECTOR =
+  /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+
+const PATH_PLACEHOLDER_RE =
+  /^\{([A-Za-z_][A-Za-z0-9_]{0,63})\}$/;
+
+const NUMERIC_ID_RE = /^\d{1,20}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const OBJECT_ID_RE = /^[0-9a-f]{24}$/i;
+const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 
 const FORBIDDEN_MARKERS = [
   "[REDACTED]",
@@ -129,12 +132,8 @@ function normalizedKey(key: string): string {
 
 function isDeniedKey(key: string): boolean {
   return (
-    HARD_DENIED_FIELD_NAMES.has(
-      normalizedKey(key),
-    )
-    || key
-      .toLowerCase()
-      .startsWith("redacted_field_")
+    HARD_DENIED_FIELD_NAMES.has(normalizedKey(key))
+    || key.toLowerCase().startsWith("redacted_field_")
   );
 }
 
@@ -148,71 +147,38 @@ function isPlainObject(
   );
 }
 
-function isForbiddenString(
-  value: string,
-): boolean {
-  return FORBIDDEN_MARKERS.some(
-    (marker) =>
-      value.includes(marker),
-  );
+function isForbiddenString(value: string): boolean {
+  return FORBIDDEN_MARKERS.some((marker) => value.includes(marker));
 }
 
 function candidateFor(
-  target: ObservedTestDataTarget,
+  target: Exclude<ObservedTestDataTarget, "PATH_PARAM">,
   selector: string,
   value: unknown,
 ): ObservedTestDataCandidate | null {
-  if (
-    utf8Bytes(selector)
-    > MAX_SELECTOR_BYTES
-  ) {
-    return null;
-  }
+  if (utf8Bytes(selector) > MAX_SELECTOR_BYTES) return null;
 
   if (value === null) {
-    return {
-      target,
-      selector,
-      valueType: "NULL",
-      value: null,
-    };
+    return { target, selector, valueType: "NULL", value: null };
   }
 
-  if (
-    typeof value === "boolean"
-  ) {
+  if (typeof value === "boolean") {
+    return { target, selector, valueType: "BOOLEAN", value };
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
     return {
       target,
       selector,
-      valueType: "BOOLEAN",
+      valueType: Number.isSafeInteger(value) ? "INTEGER" : "NUMBER",
       value,
     };
   }
 
-  if (
-    typeof value === "number"
-  ) {
-    if (!Number.isFinite(value)) {
-      return null;
-    }
-
-    return {
-      target,
-      selector,
-      valueType:
-        Number.isSafeInteger(value)
-          ? "INTEGER"
-          : "NUMBER",
-      value,
-    };
-  }
-
-  if (
-    typeof value === "string"
-  ) {
+  if (typeof value === "string") {
     if (
-      utf8Bytes(value)
-        > MAX_STRING_BYTES
+      utf8Bytes(value) > MAX_STRING_BYTES
       || isForbiddenString(value)
     ) {
       return null;
@@ -229,46 +195,28 @@ function candidateFor(
   return null;
 }
 
-function extractJsonValues(
-  body: string,
-): ObservedTestDataCandidate[] {
+function extractJsonValues(body: string): ObservedTestDataCandidate[] {
   let parsed: unknown;
 
   try {
-    parsed =
-      JSON.parse(body) as unknown;
+    parsed = JSON.parse(body) as unknown;
   } catch {
     return [];
   }
 
-  if (!isPlainObject(parsed)) {
-    return [];
-  }
+  if (!isPlainObject(parsed)) return [];
 
-  const values:
-    ObservedTestDataCandidate[] = [];
+  const values: ObservedTestDataCandidate[] = [];
 
   const walk = (
     node: Record<string, unknown>,
     prefix: string,
     depth: number,
   ): void => {
-    if (
-      depth > MAX_DEPTH
-      || values.length >= MAX_VALUES
-    ) {
-      return;
-    }
+    if (depth > MAX_DEPTH || values.length >= MAX_VALUES) return;
 
-    for (
-      const [key, child]
-      of Object.entries(node)
-    ) {
-      if (
-        values.length >= MAX_VALUES
-      ) {
-        break;
-      }
+    for (const [key, child] of Object.entries(node)) {
+      if (values.length >= MAX_VALUES) break;
 
       if (
         !SAFE_BODY_PROPERTY.test(key)
@@ -277,82 +225,32 @@ function extractJsonValues(
         continue;
       }
 
-      const selector =
-        `${prefix}.${key}`;
+      const selector = `${prefix}.${key}`;
 
-      if (
-        isPlainObject(child)
-      ) {
-        walk(
-          child,
-          selector,
-          depth + 1,
-        );
-
+      if (isPlainObject(child)) {
+        walk(child, selector, depth + 1);
         continue;
       }
 
-      /*
-       * Arrays continuam deliberadamente fora
-       * do contrato até existir selector DSL
-       * explícito para collection/wildcard.
-       */
-      if (
-        Array.isArray(child)
-      ) {
-        continue;
-      }
+      if (Array.isArray(child)) continue;
 
-      const candidate =
-        candidateFor(
-          "BODY",
-          selector,
-          child,
-        );
-
-      if (candidate) {
-        values.push(candidate);
-      }
+      const candidate = candidateFor("BODY", selector, child);
+      if (candidate) values.push(candidate);
     }
   };
 
-  walk(
-    parsed,
-    "$",
-    0,
-  );
-
+  walk(parsed, "$", 0);
   return values;
 }
 
-function extractFormValues(
-  body: string,
-): ObservedTestDataCandidate[] {
-  const params =
-    new URLSearchParams(body);
+function extractFormValues(body: string): ObservedTestDataCandidate[] {
+  const params = new URLSearchParams(body);
+  const values: ObservedTestDataCandidate[] = [];
+  const seen = new Set<string>();
 
-  const values:
-    ObservedTestDataCandidate[] = [];
-
-  const seen =
-    new Set<string>();
-
-  for (
-    const key
-    of params.keys()
-  ) {
-    if (
-      values.length >= MAX_VALUES
-    ) {
-      break;
-    }
-
-    if (
-      seen.has(key)
-    ) {
-      continue;
-    }
-
+  for (const key of params.keys()) {
+    if (values.length >= MAX_VALUES) break;
+    if (seen.has(key)) continue;
     seen.add(key);
 
     if (
@@ -362,97 +260,36 @@ function extractFormValues(
       continue;
     }
 
-    const all =
-      params.getAll(key);
-
-    const distinct =
-      [...new Set(all)];
-
-    /*
-     * Repeated form keys continuam dependendo
-     * de collection selector contract.
-     */
-    if (
-      distinct.length !== 1
-    ) {
-      continue;
-    }
+    const distinct = [...new Set(params.getAll(key))];
+    if (distinct.length !== 1) continue;
 
     const candidate =
-      candidateFor(
-        "BODY",
-        `$.${key}`,
-        distinct[0],
-      );
+      candidateFor("BODY", `$.${key}`, distinct[0]);
 
-    if (candidate) {
-      values.push(candidate);
-    }
+    if (candidate) values.push(candidate);
   }
 
   return values;
 }
 
-/*
- * 07.7.8-C2-E FIX-1 — Observed Query Shape
- *
- * A existência de uma query key segura não depende
- * de o seu valor ser reutilizável.
- *
- * Exemplo:
- *
- * ?fromDate=[REDACTED]&toDate=[REDACTED]
- *
- * selectors:
- *   QUERY/fromDate
- *   QUERY/toDate
- *
- * values:
- *   nenhum
- *
- * Importante:
- * - não lemos nem persistimos o literal aqui;
- * - nomes proibidos continuam excluídos;
- * - repeated query keys continuam válidas como shape.
- */
 function extractQuerySelectors(
   safeUrl: string | null | undefined,
 ): ObservedTestDataSelector[] {
-  if (!safeUrl) {
-    return [];
-  }
+  if (!safeUrl) return [];
 
   let url: URL;
-
   try {
-    url =
-      new URL(safeUrl);
+    url = new URL(safeUrl);
   } catch {
     return [];
   }
 
-  const selectors:
-    ObservedTestDataSelector[] = [];
+  const selectors: ObservedTestDataSelector[] = [];
+  const seen = new Set<string>();
 
-  const seen =
-    new Set<string>();
-
-  for (
-    const key
-    of url.searchParams.keys()
-  ) {
-    if (
-      selectors.length >= MAX_SELECTORS
-    ) {
-      break;
-    }
-
-    if (
-      seen.has(key)
-    ) {
-      continue;
-    }
-
+  for (const key of url.searchParams.keys()) {
+    if (selectors.length >= MAX_SELECTORS) break;
+    if (seen.has(key)) continue;
     seen.add(key);
 
     if (
@@ -472,65 +309,24 @@ function extractQuerySelectors(
   return selectors;
 }
 
-/*
- * 07.7.8-C2-E — Observed Query Values
- *
- * A fonte é a safeUrl já entregue pelo Handoff.
- *
- * Não armazenamos a URL.
- * Não produzimos identidade de endpoint a partir
- * da query.
- *
- * Apenas projetamos pares seguros:
- *
- * QUERY/fromDate = "2026-08-01"
- * QUERY/toDate   = "2026-08-31"
- *
- * Valores redigidos ou secretos são descartados.
- *
- * FIX-1:
- * o descarte do value NÃO remove mais o Query Shape,
- * que é extraído independentemente por
- * extractQuerySelectors().
- */
 function extractQueryValues(
   safeUrl: string | null | undefined,
 ): ObservedTestDataCandidate[] {
-  if (!safeUrl) {
-    return [];
-  }
+  if (!safeUrl) return [];
 
   let url: URL;
-
   try {
-    url =
-      new URL(safeUrl);
+    url = new URL(safeUrl);
   } catch {
     return [];
   }
 
-  const values:
-    ObservedTestDataCandidate[] = [];
+  const values: ObservedTestDataCandidate[] = [];
+  const seen = new Set<string>();
 
-  const seen =
-    new Set<string>();
-
-  for (
-    const key
-    of url.searchParams.keys()
-  ) {
-    if (
-      values.length >= MAX_VALUES
-    ) {
-      break;
-    }
-
-    if (
-      seen.has(key)
-    ) {
-      continue;
-    }
-
+  for (const key of url.searchParams.keys()) {
+    if (values.length >= MAX_VALUES) break;
+    if (seen.has(key)) continue;
     seen.add(key);
 
     if (
@@ -540,38 +336,135 @@ function extractQueryValues(
       continue;
     }
 
-    const all =
-      url.searchParams.getAll(key);
+    const all = url.searchParams.getAll(key);
+    if (all.length !== 1) continue;
 
-    /*
-     * O Test Data QUERY existente materializa
-     * um valor por selector.
-     *
-     * Portanto não tentamos reinterpretar:
-     *
-     * ?tag=a&tag=b
-     *
-     * como um selector escalar.
-     *
-     * O shape QUERY:tag, porém, é preservado
-     * por extractQuerySelectors().
-     */
+    const candidate =
+      candidateFor("QUERY", key, all[0]);
+
+    if (candidate) values.push(candidate);
+  }
+
+  return values;
+}
+
+function reusablePathValue(
+  kind: PathParameterKind,
+  value: string,
+): boolean {
+  if (
+    utf8Bytes(value) > MAX_STRING_BYTES
+    || isForbiddenString(value)
+  ) {
+    return false;
+  }
+
+  /*
+   * Fail-closed:
+   * long-hex genérico continua normalizado historicamente como {id},
+   * mas não vira massa automática. {id} reutilizável é numérico.
+   */
+  if (kind === "id") return NUMERIC_ID_RE.test(value);
+  if (kind === "uuid") return UUID_RE.test(value);
+  if (kind === "objectId") return OBJECT_ID_RE.test(value);
+  if (kind === "ulid") return ULID_RE.test(value);
+  return false;
+}
+
+/*
+ * C2-F:
+ * compara pathname real e normalizedPath segmento a segmento.
+ *
+ * /companies/10/employees/25
+ * /companies/{id}/employees/{id}
+ *
+ * gera no mesmo sample:
+ * id segmentIndex=1 occurrence=0 value=10
+ * id segmentIndex=3 occurrence=1 value=25
+ */
+function extractPathValues(
+  safeUrl: string | null | undefined,
+  normalizedPath: string | null | undefined,
+): ObservedTestDataCandidate[] {
+  if (!safeUrl || !normalizedPath) return [];
+
+  let url: URL;
+  try {
+    url = new URL(safeUrl);
+  } catch {
+    return [];
+  }
+
+  const observedSegments =
+    url.pathname.split("/").filter(Boolean);
+
+  const normalizedSegments =
+    normalizedPath.split("/").filter(Boolean);
+
+  if (observedSegments.length !== normalizedSegments.length) {
+    return [];
+  }
+
+  const values: ObservedTestDataCandidate[] = [];
+  const occurrences = new Map<string, number>();
+
+  for (
+    let segmentIndex = 0;
+    segmentIndex < normalizedSegments.length;
+    segmentIndex += 1
+  ) {
+    if (values.length >= MAX_VALUES) break;
+
+    const normalizedSegment =
+      normalizedSegments[segmentIndex]!;
+
+    const match =
+      PATH_PLACEHOLDER_RE.exec(normalizedSegment);
+
+    if (!match) continue;
+
+    const selector = match[1]!;
+
     if (
-      all.length !== 1
+      !SAFE_PATH_SELECTOR.test(selector)
+      || isDeniedKey(selector)
+      || utf8Bytes(selector) > MAX_SELECTOR_BYTES
     ) {
       continue;
     }
 
-    const candidate =
-      candidateFor(
-        "QUERY",
-        key,
-        all[0],
-      );
-
-    if (candidate) {
-      values.push(candidate);
+    let observedValue: string;
+    try {
+      observedValue =
+        decodeURIComponent(observedSegments[segmentIndex]!);
+    } catch {
+      continue;
     }
+
+    const observedKind =
+      classifyPathSegment(observedValue);
+
+    if (
+      observedKind === null
+      || observedKind !== selector
+      || !reusablePathValue(observedKind, observedValue)
+    ) {
+      continue;
+    }
+
+    const occurrence =
+      occurrences.get(selector) ?? 0;
+
+    occurrences.set(selector, occurrence + 1);
+
+    values.push({
+      target: "PATH_PARAM",
+      selector,
+      valueType: "STRING",
+      value: observedValue,
+      segmentIndex,
+      occurrence,
+    });
   }
 
   return values;
@@ -580,91 +473,65 @@ function extractQueryValues(
 function canonicalizeCandidates(
   values: ObservedTestDataCandidate[],
 ): ObservedTestDataCandidate[] {
-  return [...values]
-    .sort((a, b) => {
-      const targetOrder =
-        a.target.localeCompare(
-          b.target,
-        );
+  return [...values].sort((a, b) => {
+    const targetOrder = a.target.localeCompare(b.target);
+    if (targetOrder !== 0) return targetOrder;
 
-      if (
-        targetOrder !== 0
-      ) {
-        return targetOrder;
-      }
+    if (
+      a.target === "PATH_PARAM"
+      && b.target === "PATH_PARAM"
+    ) {
+      const segmentOrder =
+        (a.segmentIndex ?? Number.MAX_SAFE_INTEGER)
+        - (b.segmentIndex ?? Number.MAX_SAFE_INTEGER);
 
-      const selectorOrder =
-        a.selector.localeCompare(
-          b.selector,
-        );
+      if (segmentOrder !== 0) return segmentOrder;
 
-      if (
-        selectorOrder !== 0
-      ) {
-        return selectorOrder;
-      }
+      const occurrenceOrder =
+        (a.occurrence ?? Number.MAX_SAFE_INTEGER)
+        - (b.occurrence ?? Number.MAX_SAFE_INTEGER);
 
-      return a.valueType.localeCompare(
-        b.valueType,
-      );
-    });
+      if (occurrenceOrder !== 0) return occurrenceOrder;
+    }
+
+    const selectorOrder =
+      a.selector.localeCompare(b.selector);
+
+    if (selectorOrder !== 0) return selectorOrder;
+
+    return a.valueType.localeCompare(b.valueType);
+  });
 }
 
 function canonicalizeSelectors(
   selectors: ObservedTestDataSelector[],
 ): ObservedTestDataSelector[] {
-  return [...selectors]
-    .sort(
-      (a, b) =>
-        a.selector.localeCompare(
-          b.selector,
-        ),
-    );
+  return [...selectors].sort(
+    (a, b) => a.selector.localeCompare(b.selector),
+  );
 }
 
-async function sha256Hex(
-  value: string,
-): Promise<string> {
-  const bytes =
-    new TextEncoder()
-      .encode(value);
-
-  const digest =
-    new Uint8Array(
-      await crypto.subtle.digest(
-        "SHA-256",
-        bytes,
-      ),
-    );
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", bytes),
+  );
 
   return [...digest]
-    .map(
-      (byte) =>
-        byte
-          .toString(16)
-          .padStart(2, "0"),
-    )
+    .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
 
 /*
- * C2-E adiciona safeUrl como quarto argumento opcional.
- *
- * Isso preserva source compatibility:
- *
- * chamadas antigas com os três argumentos BODY
- * continuam válidas.
- *
- * FIX-1 adiciona Query Shape no mesmo contrato v1
- * através do campo opcional `selectors`.
- *
- * BODY/value behavior permanece inalterado.
+ * C2-F adiciona normalizedPath como quinto argumento opcional.
+ * Chamadas antigas com 3/4 argumentos continuam válidas.
  */
 export async function extractObservedTestData(
   contentType: string | null | undefined,
   body: string | null | undefined,
   truncated: boolean,
   safeUrl: string | null | undefined = null,
+  normalizedPath: string | null | undefined = null,
 ): Promise<ObservedTestDataSignal | null> {
   const normalizedContentType =
     String(contentType ?? "")
@@ -673,90 +540,56 @@ export async function extractObservedTestData(
       .toLowerCase();
 
   let bodyEncoding:
-    | Exclude<
-      ObservedTestDataEncoding,
-      "QUERY"
-    >
+    | "JSON"
+    | "FORM_URLENCODED"
     | null = null;
 
-  let bodyValues:
-    ObservedTestDataCandidate[] = [];
+  let bodyValues: ObservedTestDataCandidate[] = [];
 
-  /*
-   * truncated pertence somente ao body.
-   *
-   * Mesmo que o body esteja truncado ou ausente,
-   * QUERY ainda pode ser capturada da safeUrl.
-   */
-  if (
-    body
-    && !truncated
-  ) {
+  if (body && !truncated) {
     if (
-      normalizedContentType
-        === "application/json"
-      || normalizedContentType
-        === "text/json"
-      || normalizedContentType
-        .endsWith("+json")
+      normalizedContentType === "application/json"
+      || normalizedContentType === "text/json"
+      || normalizedContentType.endsWith("+json")
     ) {
       bodyEncoding = "JSON";
-
-      bodyValues =
-        extractJsonValues(body);
+      bodyValues = extractJsonValues(body);
     } else if (
       normalizedContentType
         === "application/x-www-form-urlencoded"
     ) {
-      bodyEncoding =
-        "FORM_URLENCODED";
-
-      bodyValues =
-        extractFormValues(body);
+      bodyEncoding = "FORM_URLENCODED";
+      bodyValues = extractFormValues(body);
     }
   }
 
   const querySelectors =
-    extractQuerySelectors(
-      safeUrl,
-    );
+    extractQuerySelectors(safeUrl);
 
   const queryValues =
-    extractQueryValues(
-      safeUrl,
-    );
+    extractQueryValues(safeUrl);
 
-  /*
-   * FIX-1:
-   * Query Shape por si só já é conhecimento válido.
-   * Não exigimos mais um literal reutilizável para
-   * preservar a existência do selector.
-   */
+  const pathValues =
+    extractPathValues(safeUrl, normalizedPath);
+
   if (
     bodyValues.length === 0
     && queryValues.length === 0
     && querySelectors.length === 0
+    && pathValues.length === 0
   ) {
     return null;
   }
 
-  /*
-   * Mantemos o limite do contrato de values.
-   *
-   * O sample de values continua sendo uma única
-   * observação correlacionada da request.
-   */
   const canonical =
     canonicalizeCandidates([
       ...bodyValues,
       ...queryValues,
-    ])
-      .slice(0, MAX_VALUES);
+      ...pathValues,
+    ]).slice(0, MAX_VALUES);
 
   const canonicalSelectors =
-    canonicalizeSelectors(
-      querySelectors,
-    )
+    canonicalizeSelectors(querySelectors)
       .slice(0, MAX_SELECTORS);
 
   if (
@@ -766,36 +599,20 @@ export async function extractObservedTestData(
     return null;
   }
 
-  /*
-   * QUERY-only:
-   *
-   * GET /holidays?fromDate=...&toDate=...
-   *
-   * encoding = QUERY
-   *
-   * BODY + QUERY:
-   *
-   * preservamos o encoding do body e os targets
-   * dentro de values distinguem BODY de QUERY.
-   */
-  const encoding:
-    ObservedTestDataEncoding =
-      bodyEncoding
-      && bodyValues.length > 0
-        ? bodyEncoding
-        : "QUERY";
+  const encoding: ObservedTestDataEncoding =
+    bodyEncoding && bodyValues.length > 0
+      ? bodyEncoding
+      : (
+        queryValues.length > 0
+        || querySelectors.length > 0
+      )
+        ? "QUERY"
+        : "PATH";
 
   /*
-   * Compatibilidade de fingerprint:
-   *
-   * Quando existem values, mantemos EXATAMENTE
-   * o payload histórico { encoding, values }.
-   *
-   * Isso evita mudar fingerprints/IDs já usados
-   * por BODY ou por QUERY values seguros.
-   *
-   * Somente sinais shape-only usam selectors
-   * para gerar um fingerprint determinístico.
+   * BODY/QUERY sem PATH_PARAM preservam o formato histórico.
+   * PATH_PARAM entra em values com posição e passa a fazer
+   * parte do fingerprint/sample correlacionado.
    */
   const fingerprintPayload =
     canonical.length > 0
@@ -816,19 +633,13 @@ export async function extractObservedTestData(
 
     sampleFingerprint:
       `otds_${(
-        await sha256Hex(
-          fingerprintPayload,
-        )
+        await sha256Hex(fingerprintPayload)
       ).slice(0, 40)}`,
 
     ...(canonicalSelectors.length > 0
-      ? {
-        selectors:
-          canonicalSelectors,
-      }
+      ? { selectors: canonicalSelectors }
       : {}),
 
-    values:
-      canonical,
+    values: canonical,
   };
 }

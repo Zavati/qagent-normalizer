@@ -31,7 +31,6 @@ function isApiCandidate(observation: HandoffObservation): boolean {
   return requestType.includes("json") || responseType.includes("json");
 }
 
-
 function normalizeObservedAuthSignal(observation: HandoffObservation): {
   authObserved: boolean | null;
   authScheme: "BEARER" | "BASIC" | "API_KEY" | "COOKIE" | "UNKNOWN" | null;
@@ -64,16 +63,45 @@ async function sha256Hex(value: string): Promise<string> {
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function endpointIdFor(message: NormalizationHandoffMessage, observation: HandoffObservation, scheme: string, host: string, path: string): Promise<string> {
-  const key = [message.context.organizationId, message.context.projectId, message.context.environmentId, observation.method, scheme, host, path].join("|");
+async function endpointIdFor(
+  message: NormalizationHandoffMessage,
+  observation: HandoffObservation,
+  scheme: string,
+  host: string,
+  path: string,
+): Promise<string> {
+  const key = [
+    message.context.organizationId,
+    message.context.projectId,
+    message.context.environmentId,
+    observation.method,
+    scheme,
+    host,
+    path,
+  ].join("|");
+
   return `nep_${(await sha256Hex(key)).slice(0, 40)}`;
 }
 
-async function normalizeEvent(message: NormalizationHandoffMessage, observation: HandoffObservation): Promise<NormalizedEventInput | null> {
+async function normalizeEvent(
+  message: NormalizationHandoffMessage,
+  observation: HandoffObservation,
+): Promise<NormalizedEventInput | null> {
   const url = normalizeApiUrl(observation.safeUrl);
   if (!url) return null;
-  const endpointId = await endpointIdFor(message, observation, url.scheme, url.host, url.normalizedPath);
-  const authSignal = normalizeObservedAuthSignal(observation);
+
+  const endpointId =
+    await endpointIdFor(
+      message,
+      observation,
+      url.scheme,
+      url.host,
+      url.normalizedPath,
+    );
+
+  const authSignal =
+    normalizeObservedAuthSignal(observation);
+
   return {
     eventId: observation.eventId,
     endpointId,
@@ -96,27 +124,59 @@ async function normalizeEvent(message: NormalizationHandoffMessage, observation:
     authScheme: authSignal.authScheme,
     requestContentType: normalizeContentType(observation.requestSample?.contentType),
     responseContentType: normalizeContentType(observation.responseSample?.contentType),
-    requestSchema: inferJsonSchema(observation.requestSample?.contentType ?? null, observation.requestSample?.body ?? null, observation.requestSample?.truncated ?? false),
-    responseSchema: inferJsonSchema(observation.responseSample?.contentType ?? null, observation.responseSample?.body ?? null, observation.responseSample?.truncated ?? false),
+    requestSchema: inferJsonSchema(
+      observation.requestSample?.contentType ?? null,
+      observation.requestSample?.body ?? null,
+      observation.requestSample?.truncated ?? false,
+    ),
+    responseSchema: inferJsonSchema(
+      observation.responseSample?.contentType ?? null,
+      observation.responseSample?.body ?? null,
+      observation.responseSample?.truncated ?? false,
+    ),
+
+    /*
+     * 07.7.8-C2-F
+     *
+     * normalizedPath é passado junto da safeUrl para permitir
+     * extração posicional sem alterar endpoint identity.
+     */
     observedTestData: await extractObservedTestData(
       observation.requestSample?.contentType ?? null,
       observation.requestSample?.body ?? null,
       observation.requestSample?.truncated ?? false,
       observation.safeUrl,
+      url.normalizedPath,
     ),
+
     createdAt: new Date().toISOString(),
   };
 }
 
-async function applyEvent(db: D1Database, event: NormalizedEventInput): Promise<void> {
+async function applyEvent(
+  db: D1Database,
+  event: NormalizedEventInput,
+): Promise<void> {
   await insertEndpointEvent(db, event);
+
   const [aggregate, existing] = await Promise.all([
     getEndpointAggregate(db, event.endpointId),
     getExistingEndpointSchemas(db, event.endpointId),
   ]);
-  const requestSchema = mergeSchemas(existing.requestSchema, event.requestSchema);
-  const responseSchema = mergeSchemas(existing.responseSchema, event.responseSchema);
-  await upsertNormalizedEndpoint(db, event, aggregate, requestSchema, responseSchema);
+
+  const requestSchema =
+    mergeSchemas(existing.requestSchema, event.requestSchema);
+
+  const responseSchema =
+    mergeSchemas(existing.responseSchema, event.responseSchema);
+
+  await upsertNormalizedEndpoint(
+    db,
+    event,
+    aggregate,
+    requestSchema,
+    responseSchema,
+  );
 }
 
 export interface CatalogUpdatePublisher {
@@ -144,15 +204,31 @@ export async function processHandoff(
   try {
     for (const observation of message.observations) {
       if (!isApiCandidate(observation)) continue;
-      const event = await normalizeEvent(message, observation);
+
+      const event =
+        await normalizeEvent(message, observation);
+
       if (event) {
         await applyEvent(db, event);
-        await catalogPublisher.send(await buildCatalogUpdateMessage(event));
+        await catalogPublisher.send(
+          await buildCatalogUpdateMessage(event),
+        );
       }
     }
-    await markHandoffProcessed(db, message.handoffId, message.partIndex);
+
+    await markHandoffProcessed(
+      db,
+      message.handoffId,
+      message.partIndex,
+    );
   } catch (error) {
-    await markHandoffFailed(db, message.handoffId, message.partIndex, error);
+    await markHandoffFailed(
+      db,
+      message.handoffId,
+      message.partIndex,
+      error,
+    );
+
     throw error;
   }
 }

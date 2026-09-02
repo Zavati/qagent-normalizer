@@ -4,13 +4,20 @@ const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
 const LONG_HEX_RE = /^[0-9a-f]{16,64}$/i;
 const NUMERIC_ID_RE = /^\d{1,20}$/;
 
+export type PathParameterKind = "uuid" | "objectId" | "ulid" | "id";
+
+export function classifyPathSegment(segment: string): PathParameterKind | null {
+  if (UUID_RE.test(segment)) return "uuid";
+  if (OBJECT_ID_RE.test(segment)) return "objectId";
+  if (ULID_RE.test(segment)) return "ulid";
+  if (NUMERIC_ID_RE.test(segment)) return "id";
+  if (LONG_HEX_RE.test(segment)) return "id";
+  return null;
+}
+
 function classifySegment(segment: string): string {
-  if (UUID_RE.test(segment)) return "{uuid}";
-  if (OBJECT_ID_RE.test(segment)) return "{objectId}";
-  if (ULID_RE.test(segment)) return "{ulid}";
-  if (NUMERIC_ID_RE.test(segment)) return "{id}";
-  if (LONG_HEX_RE.test(segment)) return "{id}";
-  return segment;
+  const kind = classifyPathSegment(segment);
+  return kind ? `{${kind}}` : segment;
 }
 
 export interface NormalizedUrl {
