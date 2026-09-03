@@ -4,6 +4,11 @@ export interface HandoffSample {
   truncated: boolean;
 }
 
+export interface HandoffObservedQuerySample {
+  contractVersion: "qagent.observed-query-sample.v1";
+  values: Record<string, string>;
+}
+
 export interface HandoffObservation {
   eventId: string;
   observedAt: string;
@@ -17,6 +22,7 @@ export interface HandoffObservation {
   authScheme?: "BEARER" | "BASIC" | "API_KEY" | "COOKIE" | "UNKNOWN" | null;
   navigationId: string | null;
   pageUrl: string | null;
+  requestQuerySample?: HandoffObservedQuerySample | null;
   requestSample: HandoffSample | null;
   responseSample: HandoffSample | null;
 }

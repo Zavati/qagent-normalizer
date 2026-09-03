@@ -147,6 +147,7 @@ async function normalizeEvent(
       observation.requestSample?.truncated ?? false,
       observation.safeUrl,
       url.normalizedPath,
+      observation.requestQuerySample,
     ),
 
     createdAt: new Date().toISOString(),

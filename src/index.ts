@@ -3,7 +3,7 @@ import { processHandoff } from "./normalization/processor";
 import { normalizePublicPathname } from "./http/publicPath";
 
 const NORMALIZER_REVISION =
-  "foundation-07.7.8-C2-E-FIX-1";
+  "foundation-07.7.8-C2-FIX-3";
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {

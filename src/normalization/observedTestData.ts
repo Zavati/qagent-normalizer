@@ -2,6 +2,7 @@ import {
   classifyPathSegment,
   type PathParameterKind,
 } from "./pathNormalizer";
+import type { HandoffObservedQuerySample } from "../contracts/handoff";
 
 export const OBSERVED_TEST_DATA_CONTRACT_VERSION =
   "qagent.observed-test-data.v1" as const;
@@ -348,6 +349,53 @@ function extractQueryValues(
   return values;
 }
 
+function candidateForObservedQueryLiteral(
+  selector: string,
+  value: string,
+): ObservedTestDataCandidate | null {
+  if (value === "true" || value === "false") {
+    return candidateFor("QUERY", selector, value === "true");
+  }
+
+  if (/^-?(?:0|[1-9]\d*)$/.test(value)) {
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed)) {
+      return candidateFor("QUERY", selector, parsed);
+    }
+  }
+
+  if (/^-?(?:0|[1-9]\d*)\.\d+$/.test(value)) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return candidateFor("QUERY", selector, parsed);
+    }
+  }
+
+  return candidateFor("QUERY", selector, value);
+}
+
+function extractQueryValuesFromSample(
+  sample: HandoffObservedQuerySample | null | undefined,
+): ObservedTestDataCandidate[] {
+  if (sample?.contractVersion !== "qagent.observed-query-sample.v1") return [];
+  if (!isPlainObject(sample.values)) return [];
+
+  const values: ObservedTestDataCandidate[] = [];
+  for (const [key, value] of Object.entries(sample.values)) {
+    if (values.length >= MAX_VALUES) break;
+    if (
+      !SAFE_QUERY_PROPERTY.test(key)
+      || isDeniedKey(key)
+      || typeof value !== "string"
+    ) {
+      continue;
+    }
+    const candidate = candidateForObservedQueryLiteral(key, value);
+    if (candidate) values.push(candidate);
+  }
+  return values;
+}
+
 function reusablePathValue(
   kind: PathParameterKind,
   value: string,
@@ -532,6 +580,7 @@ export async function extractObservedTestData(
   truncated: boolean,
   safeUrl: string | null | undefined = null,
   normalizedPath: string | null | undefined = null,
+  requestQuerySample: HandoffObservedQuerySample | null | undefined = null,
 ): Promise<ObservedTestDataSignal | null> {
   const normalizedContentType =
     String(contentType ?? "")
@@ -566,8 +615,13 @@ export async function extractObservedTestData(
   const querySelectors =
     extractQuerySelectors(safeUrl);
 
+  const sampledQueryValues =
+    extractQueryValuesFromSample(requestQuerySample);
+
   const queryValues =
-    extractQueryValues(safeUrl);
+    sampledQueryValues.length > 0
+      ? sampledQueryValues
+      : extractQueryValues(safeUrl);
 
   const pathValues =
     extractPathValues(safeUrl, normalizedPath);
