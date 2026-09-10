@@ -1,3 +1,4 @@
+import type { BaselineCapture } from "../baseline/safeCapture";
 import type { InferredSchema } from "../normalization/schemaInference";
 import type { OriginRelation } from "../normalization/originRelation";
 import type { NormalizedEventInput } from "../storage/normalizerRepository";
@@ -48,6 +49,7 @@ export interface CatalogUpdateMessageV1 {
     response: CatalogSchemaSignal | null;
   };
   observedTestData?: ObservedTestDataSignal;
+  observedBaseline?: BaselineCapture;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -124,6 +126,7 @@ export async function buildCatalogUpdateMessage(
       responseContentType: event.responseContentType,
     },
     schemas: { request, response },
+    ...(event.observedBaseline ? {observedBaseline:event.observedBaseline} : {}),
     ...(event.observedTestData ? { observedTestData: event.observedTestData } : {}),
   };
 }

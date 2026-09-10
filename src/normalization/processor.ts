@@ -1,3 +1,4 @@
+import { buildObservedBaselineCapture } from "../baseline/buildCapture";
 import type { HandoffObservation, NormalizationHandoffMessage } from "../contracts/handoff";
 import { normalizeApiUrl } from "./pathNormalizer";
 import { inferJsonSchema, mergeSchemas } from "./schemaInference";
@@ -210,6 +211,7 @@ export async function processHandoff(
         await normalizeEvent(message, observation);
 
       if (event) {
+        event.observedBaseline = await buildObservedBaselineCapture(observation, event);
         await applyEvent(db, event);
         await catalogPublisher.send(
           await buildCatalogUpdateMessage(event),

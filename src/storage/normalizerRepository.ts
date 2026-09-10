@@ -1,3 +1,4 @@
+import type { BaselineCapture } from "../baseline/safeCapture";
 import type { InferredSchema } from "../normalization/schemaInference";
 import type { OriginRelation } from "../normalization/originRelation";
 import type { ObservedTestDataSignal } from "../normalization/observedTestData";
@@ -29,6 +30,7 @@ export interface NormalizedEventInput {
   requestSchema: InferredSchema | null;
   responseSchema: InferredSchema | null;
   observedTestData: ObservedTestDataSignal | null;
+  observedBaseline?: BaselineCapture | null;
   createdAt: string;
 }
 

@@ -12,6 +12,8 @@ describe("Foundation 07.4.10 normalization", () => {
     expect(inferJsonSchema("application/json", JSON.stringify({ id: 42, name: "Ana", active: true }), false))
       .toEqual({
         type: "object",
+        "x-qagent-inference-version": "qagent.structural-inference.v2",
+        "x-qagent-observed-required": ["active", "id", "name"],
         properties: {
           id: { type: "integer" },
           name: { type: "string" },
