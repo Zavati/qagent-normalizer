@@ -14,7 +14,9 @@
     "check": "npm run typecheck && vitest run",
     "verify:bindings": "node scripts/verify-bindings.mjs",
     "test:f08-1-6": "node --test test/test-08-1-6-observed-baseline.mjs",
-    "check:08.1.6": "npm run check && npm run test:f08-1-6"
+    "check:08.1.6": "npm run check && npm run test:f08-1-6",
+    "test:f08-1-6-fix2": "node --test test/active-learning-capture-08.1.6-fix2.test.mjs",
+    "check:08.1.6-fix2": "npm run check:08.1.6 && npm run test:f08-1-6-fix2"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.1",

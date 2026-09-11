@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createRequire} from 'node:module';const require=createRequire(import.meta.url),{load}=require('./helpers/load-source.cjs');const {inferJsonSchema,schemaCoverageReasons}=load('normalization/schemaInference');
+
+test('29 rows no longer exceed inference sampling limit',()=>{const s=inferJsonSchema('application/json',JSON.stringify({data:Array.from({length:29},(_,id)=>({id,active:true}))}),false);assert.deepEqual(schemaCoverageReasons(s),[]);assert.equal(s.properties.data.items.properties.id.type,'integer');});
+test('51 rows still expose sampling incompleteness',()=>{const s=inferJsonSchema('application/json',JSON.stringify({data:Array.from({length:51},(_,id)=>({id}))}),false);assert.ok(schemaCoverageReasons(s).includes('ARRAY_SAMPLE_LIMIT'));});
+test('transport truncation is never promoted complete',()=>{const s=inferJsonSchema('application/json','{"data":[]}',true);assert.ok(schemaCoverageReasons(s).length>0);});

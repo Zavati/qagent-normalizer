@@ -10,7 +10,7 @@ export type InferredSchema = {
   "x-qagent-inference-version"?: string;
   "x-qagent-observed-required"?: string[];
 };
-const MAX_DEPTH = 6, MAX_PROPERTIES = 64, MAX_ARRAY_ITEMS = 20;
+const MAX_DEPTH = 6, MAX_PROPERTIES = 64, MAX_ARRAY_ITEMS = 50;
 const MARKER = /\[REDACTED\]|\[TRUNCATED\]|__qagent_(?:redacted|truncated)__/i;
 function partial(schema: InferredSchema, ...reasons: string[]): InferredSchema {
   schema["x-qagent-partial"] = true;
